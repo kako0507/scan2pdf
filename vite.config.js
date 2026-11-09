@@ -44,8 +44,24 @@ function precacheServiceWorker() {
   };
 }
 
+/**
+ * Inject the Google Search Console verification meta tag when GOOGLE_SITE_VERIFICATION is set (CI passes it in
+ * from the repository variable). Accepts either the bare token or the full <meta ...> tag Google shows.
+ */
+function googleSiteVerification() {
+  const raw = (process.env.GOOGLE_SITE_VERIFICATION || '').trim();
+  const token = raw.match(/content=["']([^"']+)["']/)?.[1] ?? raw;
+  return {
+    name: 'google-site-verification',
+    transformIndexHtml() {
+      if (!token) return [];
+      return [{ tag: 'meta', attrs: { name: 'google-site-verification', content: token }, injectTo: 'head' }];
+    },
+  };
+}
+
 export default defineConfig({
   base: './', // relative paths work at https://<user>.github.io/<repo>/ under any repo name
-  plugins: [react(), tesseractRuntime, precacheServiceWorker()],
+  plugins: [react(), tesseractRuntime, precacheServiceWorker(), googleSiteVerification()],
   test: { environment: 'node', include: ['src/**/*.test.js'] },
 });

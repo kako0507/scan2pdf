@@ -26,6 +26,8 @@ jobs:
       - run: npm ci
       - run: npm run test:unit
       - run: npm run build
+        env:
+          GOOGLE_SITE_VERIFICATION: ${{ vars.GOOGLE_SITE_VERIFICATION }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
