@@ -1,111 +1,83 @@
 import { describe, expect, it } from 'vitest';
 import { configureStore } from '@reduxjs/toolkit';
-import { appReducer, rootReducer } from './index.js';
+import { rootReducer } from './index.js';
 import {
   cornerDragEnded, cornerDragStarted, cornerMoved, draftCommitted, draftMoved, draftStarted, itemRemoved,
-  itemTextChanged, langSet, ocrLangToggled, ocrLinesReceived, pageReady, photoLoaded, quadSet, stepSet,
+  itemTextChanged, langSet, ocrLangToggled, ocrLinesReceived, pageReady, quadSet, viewSet,
 } from './slices.js';
+import { P, QUAD, onePage, run } from './testUtils.js';
 
-const deepFreeze = (o) => { Object.values(o).forEach((v) => v && typeof v === 'object' && deepFreeze(v)); return Object.freeze(o); };
-const root = (state, action) => appReducer(state, action);
+const page = pageReady({ url: 'blob:page', w: 2480, h: 3508, source: null });
+const line = (text) => ({ text, x0: 0, y0: 0, x1: 10, y1: 10, conf: 90 });
+const draw = (x0, y0, x1, y1) => [draftStarted({ x: x0, y: y0 }), draftMoved({ x: x1, y: y1 }), draftCommitted({ minSide: 16, w: 2480, h: 3508 })];
 
-/** Apply actions to deep-frozen states: any mutation of the input throws, and equal inputs must give equal outputs. */
-function run(actions) {
-  let s = root(undefined, { type: '@@init' });
-  for (const a of actions) {
-    deepFreeze(s);
-    const next = root(s, a);
-    expect(root(s, a)).toEqual(next); // deterministic
-    s = next;
-  }
-  return s;
-}
-
-const photo = photoLoaded({ url: 'blob:p', w: 1000, h: 800, name: 'doc' });
-const quad = [{ x: 10, y: 10 }, { x: 990, y: 20 }, { x: 980, y: 790 }, { x: 5, y: 780 }];
-const page = pageReady({ url: 'blob:page', w: 2480, h: 3508 });
-
-describe('reducers', () => {
-  it('loads a photo and names the output after it', () => {
-    const s = run([photo]);
-    expect(s.document.photo.w).toBe(1000);
-    expect(s.ui.fileName).toBe('doc');
-  });
-
+describe('single-page reducers (routed to the open page)', () => {
   it('drags a corner, clamps it to the photo and re-orders swapped corners', () => {
-    const s = run([photo, quadSet({ quad, detected: true }), cornerDragStarted(0), cornerMoved({ x: 2000, y: 900 }), cornerDragEnded()]);
-    expect(s.document.draggingCorner).toBe(null);
-    expect(s.document.quad).toContainEqual({ x: 1000, y: 800 });
-    expect(s.document.quad[0]).toEqual({ x: 5, y: 780 }); // smallest x+y is the new top-left
+    const s = run([...onePage(), cornerDragStarted(0), cornerMoved({ x: 2000, y: 900 }), cornerDragEnded()]);
+    expect(P(s).document.draggingCorner).toBe(null);
+    expect(P(s).document.quad).toContainEqual({ x: 1000, y: 800 });
+    expect(P(s).document.quad[0]).toEqual({ x: 5, y: 780 }); // smallest x+y is the new top-left
   });
 
   it('ignores corner moves when no drag is active', () => {
-    const s = run([photo, quadSet({ quad, detected: true }), cornerMoved({ x: 1, y: 1 })]);
-    expect(s.document.quad).toEqual(quad);
+    expect(P(run([...onePage(), cornerMoved({ x: 1, y: 1 })])).document.quad).toEqual(QUAD);
   });
 
-  it('flags failed detection in the status line', () => {
-    expect(run([photo, quadSet({ quad, detected: false })]).ui.status.key).toBe('detectFailed');
+  it('remembers failed detection on the page', () => {
+    expect(P(run([...onePage(), quadSet({ quad: QUAD, detected: false })])).document.detectFailed).toBe(true);
   });
 
   it('keeps manual boxes when OCR runs again and replaces OCR lines', () => {
-    const s = run([
-      photo, page,
-      draftStarted({ x: 100, y: 3000 }), draftMoved({ x: 600, y: 3100 }), draftCommitted({ minSide: 16, w: 2480, h: 3508 }),
-      ocrLinesReceived([{ text: 'A', x0: 0, y0: 0, x1: 10, y1: 10, conf: 90 }]),
-      ocrLinesReceived([{ text: 'B', x0: 0, y0: 0, x1: 10, y1: 10, conf: 90 }]),
-    ]);
-    expect(s.textLayer.items.map((i) => i.text)).toEqual(['B', '']);
-    expect(new Set(s.textLayer.items.map((i) => i.id)).size).toBe(2);
+    const s = run([...onePage(), page, ...draw(100, 3000, 600, 3100), ocrLinesReceived([line('A')]), ocrLinesReceived([line('B')])]);
+    expect(P(s).textLayer.items.map((i) => i.text)).toEqual(['B', '']);
+    expect(new Set(P(s).textLayer.items.map((i) => i.id)).size).toBe(2);
   });
 
   it('discards tiny drafts and clamps boxes to the page', () => {
-    const tiny = run([photo, page, draftStarted({ x: 5, y: 5 }), draftMoved({ x: 8, y: 8 }), draftCommitted({ minSide: 16, w: 2480, h: 3508 })]);
-    expect(tiny.textLayer.items).toHaveLength(0);
-    const s = run([photo, page, draftStarted({ x: 2400, y: 3400 }), draftMoved({ x: 2600, y: 3600 }), draftCommitted({ minSide: 16, w: 2480, h: 3508 })]);
-    expect(s.textLayer.items[0]).toMatchObject({ x1: 2480, y1: 3508, added: true });
-    expect(s.textLayer.selectedId).toBe(s.textLayer.items[0].id);
+    expect(P(run([...onePage(), page, ...draw(5, 5, 8, 8)])).textLayer.items).toHaveLength(0);
+    const s = run([...onePage(), page, ...draw(2400, 3400, 2600, 3600)]);
+    expect(P(s).textLayer.items[0]).toMatchObject({ x1: 2480, y1: 3508, added: true });
+    expect(P(s).textLayer.selectedId).toBe(P(s).textLayer.items[0].id);
   });
 
   it('edits and removes items', () => {
-    let s = run([photo, page, ocrLinesReceived([{ text: 'x', x0: 0, y0: 0, x1: 10, y1: 10, conf: 90 }])]);
-    const id = s.textLayer.items[0].id;
-    s = run([photo, page, ocrLinesReceived([{ text: 'x', x0: 0, y0: 0, x1: 10, y1: 10, conf: 90 }]), itemTextChanged({ id, text: '劉添華' })]);
-    expect(s.textLayer.items[0].text).toBe('劉添華');
-    expect(root(deepFreeze(s), itemRemoved(id)).textLayer.items).toHaveLength(0);
+    const base = run([...onePage(), page, ocrLinesReceived([line('x')])]);
+    const id = P(base).textLayer.items[0].id;
+    const s = run([itemTextChanged({ id, text: '劉添華' })], base);
+    expect(P(s).textLayer.items[0].text).toBe('劉添華');
+    expect(P(run([itemRemoved(id)], s)).textLayer.items).toHaveLength(0);
   });
 
-  it('remembers that OCR ran on the current page until a new page arrives', () => {
-    const ocr = ocrLinesReceived([{ text: 'x', x0: 0, y0: 0, x1: 10, y1: 10, conf: 90 }]);
-    expect(run([photo, page]).textLayer.ocrDone).toBe(false);
-    expect(run([photo, page, ocr]).textLayer.ocrDone).toBe(true);
-    expect(run([photo, page, ocr, stepSet('corners'), stepSet('text')]).textLayer.ocrDone).toBe(true);
-    expect(run([photo, page, ocr, page]).textLayer.ocrDone).toBe(false);
+  it('a new page image clears the text layer and the OCR flag', () => {
+    const s = run([...onePage(), page, ocrLinesReceived([line('x')])]);
+    expect(P(s).textLayer.ocrDone).toBe(true);
+    expect(P(run([viewSet('pages'), viewSet('text')], s)).textLayer.ocrDone).toBe(true);
+    const next = run([page], s);
+    expect(P(next).textLayer.items).toHaveLength(0);
+    expect(P(next).textLayer.ocrDone).toBe(false);
   });
 
-  it('a new page clears the text layer', () => {
-    const s = run([photo, page, ocrLinesReceived([{ text: 'x', x0: 0, y0: 0, x1: 10, y1: 10, conf: 90 }]), page]);
-    expect(s.textLayer.items).toHaveLength(0);
+  it('page-level actions do nothing when no page is open', () => {
+    const s = run([cornerMoved({ x: 1, y: 1 }), ocrLinesReceived([line('x')])]);
+    expect(s.pages.order).toEqual([]);
   });
+});
 
-  it('moves through the steps', () => {
-    expect(run([]).ui.step).toBe('photo');
-    expect(run([photo]).ui.step).toBe('corners');
-    expect(run([photo, page]).ui.step).toBe('text');
-    expect(run([photo, page, stepSet('save')]).ui.step).toBe('save');
-    expect(run([photo, page, stepSet('corners')]).document.page.url).toBe('blob:page'); // going back keeps the page
-  });
-
+describe('settings and ui', () => {
   it('settings', () => {
     const s = run([langSet('zh-Hant'), ocrLangToggled('eng')]);
     expect(s.settings.lang).toBe('zh-Hant');
     expect(s.settings.ocrLangs).toEqual(['chi_tra']);
   });
 
+  it('starts on the page list', () => {
+    expect(run([]).ui.view).toBe('pages');
+    expect(run([viewSet('corners')]).ui.view).toBe('corners');
+  });
+
   it('works in a real store with RTK immutability and serialisability checks', () => {
     const store = configureStore({ reducer: rootReducer });
-    [photo, quadSet({ quad, detected: true }), page, draftStarted({ x: 1, y: 1 }), draftMoved({ x: 99, y: 99 }),
-      draftCommitted({ minSide: 16, w: 2480, h: 3508 })].forEach((a) => store.dispatch(a));
-    expect(store.getState().textLayer.items).toHaveLength(1);
+    [...onePage(), page, ...draw(1, 1, 99, 99)].forEach((a) => store.dispatch(a));
+    expect(P(store.getState()).textLayer.items).toHaveLength(1);
   });
 });

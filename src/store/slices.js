@@ -2,6 +2,7 @@ import { createSlice } from '@reduxjs/toolkit';
 import { orderCorners } from '../lib/geometry.js';
 
 // All state is serialisable. Image pixels live outside the store (lib/imageCache.js), referenced by blob URL.
+// `document` and `textLayer` describe ONE page; see pages.js for the list of pages.
 
 // ---------- settings ----------
 export const settingsSlice = createSlice({
@@ -156,23 +157,20 @@ export const uiSlice = createSlice({
     ocrProgress: null, // 0..1 while OCR runs
     fileName: 'scan',
     dragOver: false, // a file is being dragged over the drop zone
-    step: 'photo', // 'photo' | 'corners' | 'text' | 'save' — only the current step is shown
+    view: 'pages', // 'pages' (page list + export) | 'corners' | 'text' (editor for the open page)
+    reorder: null, // page card being dragged to a new position: { dragId, overId }
   },
   reducers: {
-    stepSet: (s, a) => { s.step = a.payload; s.status = null; },
+    viewSet: (s, a) => { s.view = a.payload; s.status = null; },
     dragOverSet: (s, a) => { s.dragOver = a.payload; },
     busyStarted: (s) => { s.busy = true; s.status = { key: 'working', args: [] }; },
     busyEnded: (s) => { s.busy = false; s.ocrProgress = null; },
     statusSet: (s, a) => { s.status = a.payload ? { key: a.payload.key, args: a.payload.args ?? [] } : null; },
     ocrProgressSet: (s, a) => { s.ocrProgress = a.payload; },
     fileNameSet: (s, a) => { s.fileName = a.payload; },
-  },
-  extraReducers: (b) => {
-    b.addCase(documentSlice.actions.photoLoaded, (s, a) => { s.fileName = a.payload.name || 'scan'; s.step = 'corners'; });
-    b.addCase(documentSlice.actions.pageReady, (s) => { s.step = 'text'; });
-    b.addCase(documentSlice.actions.quadSet, (s, a) => {
-      s.status = a.payload.detected ? null : { key: 'detectFailed', args: [] };
-    });
+    reorderStarted: (s, a) => { s.reorder = { dragId: a.payload, overId: null }; },
+    reorderOver: (s, a) => { if (s.reorder) s.reorder.overId = a.payload; },
+    reorderEnded: (s) => { s.reorder = null; },
   },
 });
 
@@ -182,4 +180,6 @@ export const {
   ocrLinesReceived, itemTextChanged, itemRemoved, itemSelected,
   draftStarted, draftMoved, draftCancelled, draftCommitted, boxDragStarted, boxDragMoved, boxDragEnded,
 } = textLayerSlice.actions;
-export const { busyStarted, busyEnded, statusSet, ocrProgressSet, fileNameSet, dragOverSet, stepSet } = uiSlice.actions;
+export const {
+  busyStarted, busyEnded, statusSet, ocrProgressSet, fileNameSet, dragOverSet, viewSet, reorderStarted, reorderOver, reorderEnded,
+} = uiSlice.actions;

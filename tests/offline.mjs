@@ -42,13 +42,16 @@ try {
   await page.waitForSelector('#langBtn');
   console.log('offline reload, remembered language:', await page.evaluate(() => document.documentElement.lang));
   await (await page.$('#file')).uploadFile(join(root, 'tests/fixtures/sample.jpg'));
-  await page.waitForFunction(() => window.__scan2pdfStore.getState().document.quad);
+  await page.waitForSelector('.page-card .thumb');
+  await page.waitForFunction(() => !window.__scan2pdfStore.getState().ui.busy);
+  await page.click('.page-card .thumb');
+  await page.waitForSelector('#warpBtn');
   await page.click('#warpBtn');
   await page.waitForFunction(() => {
-    const st = window.__scan2pdfStore.getState();
-    return st.ui.step === 'text' && st.textLayer.ocrDone && !st.ui.busy; // OCR runs automatically
+    const s = window.__scan2pdfStore.getState();
+    return s.ui.view === 'text' && s.pages.byId[s.pages.activeId].textLayer.ocrDone && !s.ui.busy; // OCR runs automatically
   }, { timeout: 120000 });
-  const n = await page.evaluate(() => window.__scan2pdfStore.getState().textLayer.items.length);
+  const n = await page.evaluate(() => { const s = window.__scan2pdfStore.getState(); return s.pages.byId[s.pages.activeId].textLayer.items.length; });
   console.log('offline OCR lines:', n, '|', await page.evaluate(() => document.getElementById('status').textContent)); ok &&= n > 0;
 } finally { await browser.close(); server.close(); }
 console.log(ok ? 'PASS' : 'FAIL'); process.exitCode = ok ? 0 : 1;

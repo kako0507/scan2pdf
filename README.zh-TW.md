@@ -2,11 +2,13 @@
 
 [English](README.md) | **繁體中文**
 
-照片 → 校正成 A4、可搜尋文字的 PDF。全部在瀏覽器內處理：不上傳、不需要伺服器，第一次開啟後即可離線使用。
+照片 → 校正成 A4、可搜尋文字的多頁 PDF。全部在瀏覽器內處理：不上傳、不需要伺服器，第一次開啟後即可離線使用。
 
 ## 功能
 
-- **逐步操作**：照片 → 四角 → 文字 → 儲存，一次只顯示一個步驟。返回上一步且沒有修改時，辨識結果和編輯都會保留。
+- **多頁**：可一次選多張照片（之後也能再新增），用拖曳或 ◀ ▶ 調整順序、移除頁面。主畫面就是頁面列表，點任一頁即可編輯。
+- **逐頁編輯**：先調四角、再編輯文字，一次只顯示一個畫面。返回上一步且沒有修改時，辨識結果和編輯都會保留。
+- **輸出多頁 PDF**：依列表順序輸出；每一頁都處理過（點開並完成校正）後才能輸出。
 - **自動抓文件邊緣並透視校正**為 A4（直式／橫式，150／200／300 dpi），可拖曳四角微調。
 - **文字辨識**：使用 Tesseract（繁體中文＋英文），新頁面進入文字步驟時自動執行。文字是看不見的一層：PDF 外觀和照片一樣，但可以搜尋、複製。
 - **修正與補字**：可修正辨識錯誤，並在頁面上拖曳一個框，補上辨識不到的字（簽名、印章）。
@@ -32,11 +34,12 @@
 ```
 src/
   main.jsx            store 與 <Provider>、語言設定保存、註冊 Service Worker
-  App.jsx             步驟指示、目前步驟、儲存步驟、快捷鍵
-  components/         PhotoStep、CornerStep、TextStep（頁面編輯與文字清單）、UndoRedo
+  App.jsx             頁面列表或單頁編輯畫面、快捷鍵
+  components/         PageList（含輸出 PDF）、CornerStep、TextStep（頁面編輯與文字清單）、PageHeading、UndoRedo
   store/
-    slices.js         settings、document、textLayer、ui
-    history.js        四角與文字層的復原／重做（higher-order reducer）
+    slices.js         settings、ui，以及單頁的 document／textLayer slice
+    pages.js          頁面清單（順序、開啟中的頁面），並把單頁 action 轉給對應頁面
+    history.js        每頁各自的四角與文字層復原／重做（higher-order reducer）
     thunks.js         圖片解碼、透視校正、文字辨識、下載 PDF
   lib/                幾何（邊緣偵測、homography、校正）、OCR、PDF、圖片快取
   assets/             glyphless.ttf（Tesseract 的無字形字型，用於看不見的文字層）
@@ -51,8 +54,8 @@ git 裡不放任何第三方檔案，升級只要 `npm update`。
 npm install
 npm run dev          # http://localhost:5173
 npm run build        # 輸出到 dist/
-npm run test:unit    # Vitest：reducer、復原／重做、幾何、文字整理
-npm run test:e2e     # 建置後在系統的 Edge/Chrome 跑完整流程（puppeteer-core）；必要時設定 BROWSER=/路徑
+npm run test:unit    # Vitest：reducer、頁面、復原／重做、幾何、文字整理
+npm run test:e2e     # 建置後在系統的 Edge/Chrome 跑兩頁的完整流程（puppeteer-core）；必要時設定 BROWSER=/路徑
 npm run test:offline # 建置後測試預設語言與離線文字辨識
 ```
 

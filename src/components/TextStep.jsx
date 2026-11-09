@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react';
-import { svgPoint, useDispatch, useSelector, useT } from '../hooks.js';
+import { svgPoint, useDispatch, usePage, useSelector, useT } from '../hooks.js';
 import {
   boxDragEnded, boxDragMoved, boxDragStarted, draftCancelled, draftCommitted, draftMoved, draftStarted,
-  itemRemoved, itemSelected, itemTextChanged, ocrLangToggled, stepSet,
+  itemRemoved, itemSelected, itemTextChanged, ocrLangToggled, viewSet,
 } from '../store/slices.js';
+import PageHeading from './PageHeading.jsx';
 import UndoRedo from './UndoRedo.jsx';
 import { runOcr } from '../store/thunks.js';
 
@@ -23,8 +24,8 @@ function Handles({ item, size }) {
 
 function PageEditor() {
   const dispatch = useDispatch();
-  const page = useSelector((s) => s.document.page);
-  const { items, selectedId, draft, boxDrag } = useSelector((s) => s.textLayer);
+  const page = usePage((p) => p.document.page);
+  const { items, selectedId, draft, boxDrag } = usePage((p) => p.textLayer);
   const svgRef = useRef(null);
   const minSide = page.w / 150;
   const selected = items.find((i) => i.id === selectedId);
@@ -106,7 +107,7 @@ function ItemRow({ item, selected }) {
 
 function ItemList() {
   const t = useT();
-  const { items, selectedId } = useSelector((s) => s.textLayer);
+  const { items, selectedId } = usePage((p) => p.textLayer);
   return (
     <ol id="items" className="items">
       {items.length === 0 && <li className="empty">{t('noItems')}</li>}
@@ -118,15 +119,16 @@ function ItemList() {
 export default function TextStep() {
   const t = useT();
   const dispatch = useDispatch();
-  const page = useSelector((s) => s.document.page);
+  const page = usePage((p) => p.document.page);
   const ocrLangs = useSelector((s) => s.settings.ocrLangs);
-  const ocrDone = useSelector((s) => s.textLayer.ocrDone);
+  const ocrDone = usePage((p) => p.textLayer.ocrDone);
   const { busy, ocrProgress } = useSelector((s) => s.ui);
   if (!page) return null;
 
   return (
     <section id="s3">
-      <h2>{t('step3')}</h2>
+      <h2>{t('textTitle')}</h2>
+      <PageHeading />
       <div className="controls">
         <span>{t('ocrLangs')}</span>
         {[['chi_tra', 'langChiTra'], ['eng', 'langEng']].map(([code, key]) => (
@@ -146,8 +148,8 @@ export default function TextStep() {
         <ItemList />
       </div>
       <div className="nav">
-        <button type="button" className="ghost" disabled={busy} onClick={() => dispatch(stepSet('corners'))}>{t('back')}</button>
-        <button id="nextBtn" type="button" className="primary" disabled={busy} onClick={() => dispatch(stepSet('save'))}>{t('next')}</button>
+        <button type="button" className="ghost" disabled={busy} onClick={() => dispatch(viewSet('corners'))}>{t('back')}</button>
+        <button id="doneBtn" type="button" className="primary" disabled={busy} onClick={() => dispatch(viewSet('pages'))}>{t('donePage')}</button>
       </div>
     </section>
   );

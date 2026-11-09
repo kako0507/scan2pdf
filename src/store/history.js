@@ -1,8 +1,8 @@
 // Undo / redo for two editing contexts, each with its own history:
 //   corners — the page corners (step 2)
 //   text    — the text boxes: added, removed, moved, resized, edited, OCR results (step 3)
-// Implemented as a higher-order reducer around the root reducer (itself a pure function). Selection, busy
-// flags, progress and in-progress drags are never part of history.
+// Implemented as a higher-order reducer around the single-page reducer (itself a pure function), so every page
+// has its own history. Selection and in-progress drags are never part of history.
 import { createAction } from '@reduxjs/toolkit';
 
 /** payload: 'corners' | 'text' */
@@ -72,7 +72,7 @@ export function undoable(reducer) {
     if (undo.match(action) || redo.match(action)) {
       const scope = SCOPES[action.payload];
       const track = history[action.payload];
-      if (!scope || !current?.document || current.ui?.busy) return state; // no time travel mid-operation
+      if (!scope || !current?.document) return state;
       const isUndo = undo.match(action);
       const from = isUndo ? track.past : track.future;
       if (!from.length) return state;
@@ -98,5 +98,7 @@ export function undoable(reducer) {
   };
 }
 
-export const selectCanUndo = (scope) => (s) => s.history[scope].past.length > 0;
-export const selectCanRedo = (scope) => (s) => s.history[scope].future.length > 0;
+// Selectors for the page open in the editor.
+const activeTrack = (s, scope) => s.pages.byId[s.pages.activeId]?.history[scope];
+export const selectCanUndo = (scope) => (s) => (activeTrack(s, scope)?.past.length ?? 0) > 0;
+export const selectCanRedo = (scope) => (s) => (activeTrack(s, scope)?.future.length ?? 0) > 0;

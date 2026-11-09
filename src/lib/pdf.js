@@ -56,48 +56,49 @@ function utf16Hex(text) {
 }
 
 /**
- * @param {Blob} jpeg page image (JPEG)
- * @param {{w:number,h:number}} imgSize page image pixel size
- * @param {{text:string,x0:number,y0:number,x1:number,y1:number}[]} items boxes in image pixels
+ * Build a PDF with one A4 page per entry (portrait or landscape, following the image), each with its text layer.
+ * @param {{jpeg: Blob, size: {w:number,h:number}, items: {text:string,x0:number,y0:number,x1:number,y1:number}[]}[]} pages
+ *   page image (JPEG), its pixel size, and text boxes in image pixels
  * @param {Uint8Array} glyphlessTtf
  * @param {{title?:string}} meta
  * @returns {Promise<Uint8Array>}
  */
-export async function buildPdf(jpeg, imgSize, items, glyphlessTtf, meta = {}) {
-  const landscape = imgSize.w > imgSize.h;
-  const pw = landscape ? A4_PT.h : A4_PT.w, ph = landscape ? A4_PT.w : A4_PT.h;
-
+export async function buildPdf(pages, glyphlessTtf, meta = {}) {
   const pdf = await PDFDocument.create();
   pdf.setTitle(meta.title || 'scan');
   pdf.setProducer('scan2pdf');
   pdf.setCreator('scan2pdf');
-  const page = pdf.addPage([pw, ph]);
-  const img = await pdf.embedJpg(new Uint8Array(await jpeg.arrayBuffer()));
-  page.drawImage(img, { x: 0, y: 0, width: pw, height: ph });
-
-  const fontRef = addGlyphlessFont(pdf, glyphlessTtf);
+  const fontRef = addGlyphlessFont(pdf, glyphlessTtf); // shared by all pages
   const fontName = 'FGlyphLess';
-  page.node.setFontDictionary(PDFName.of(fontName), fontRef);
 
-  const k = pw / imgSize.w;
-  const ordered = [...items]
-    .filter((it) => it.text && it.text.trim())
-    .sort((a, b) => (a.y0 + a.y1) / 2 - (b.y0 + b.y1) / 2 || a.x0 - b.x0);
-  const ops = [];
-  for (const it of ordered) {
-    const text = it.text.replace(/\s+/g, ' ').trim();
-    const size = Math.max(1, (it.y1 - it.y0) * k);
-    const width = Math.max(1, (it.x1 - it.x0) * k);
-    const hscale = width / (text.length * size * (GLYPH_WIDTH / 1000));
-    ops.push(
-      beginText(),
-      setTextRenderingMode(TextRenderingMode.Invisible),
-      setFontAndSize(fontName, size),
-      setTextMatrix(hscale, 0, 0, 1, it.x0 * k, ph - it.y1 * k),
-      showText(PDFHexString.of(utf16Hex(text))),
-      endText(),
-    );
+  for (const { jpeg, size, items } of pages) {
+    const landscape = size.w > size.h;
+    const pw = landscape ? A4_PT.h : A4_PT.w, ph = landscape ? A4_PT.w : A4_PT.h;
+    const page = pdf.addPage([pw, ph]);
+    const img = await pdf.embedJpg(new Uint8Array(await jpeg.arrayBuffer()));
+    page.drawImage(img, { x: 0, y: 0, width: pw, height: ph });
+    page.node.setFontDictionary(PDFName.of(fontName), fontRef);
+
+    const k = pw / size.w;
+    const ordered = [...items]
+      .filter((it) => it.text && it.text.trim())
+      .sort((a, b) => (a.y0 + a.y1) / 2 - (b.y0 + b.y1) / 2 || a.x0 - b.x0);
+    const ops = [];
+    for (const it of ordered) {
+      const text = it.text.replace(/\s+/g, ' ').trim();
+      const fontSize = Math.max(1, (it.y1 - it.y0) * k);
+      const width = Math.max(1, (it.x1 - it.x0) * k);
+      const hscale = width / (text.length * fontSize * (GLYPH_WIDTH / 1000));
+      ops.push(
+        beginText(),
+        setTextRenderingMode(TextRenderingMode.Invisible),
+        setFontAndSize(fontName, fontSize),
+        setTextMatrix(hscale, 0, 0, 1, it.x0 * k, ph - it.y1 * k),
+        showText(PDFHexString.of(utf16Hex(text))),
+        endText(),
+      );
+    }
+    page.pushOperators(...ops);
   }
-  page.pushOperators(...ops);
   return pdf.save();
 }

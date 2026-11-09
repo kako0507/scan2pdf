@@ -1,16 +1,19 @@
 import { combineReducers, configureStore } from '@reduxjs/toolkit';
-import { undoable } from './history.js';
-import { documentSlice, settingsSlice, textLayerSlice, uiSlice } from './slices.js';
+import { redo, undo } from './history.js';
+import { pagesReducer } from './pages.js';
+import { settingsSlice, uiSlice } from './slices.js';
 
 export const appReducer = combineReducers({
   settings: settingsSlice.reducer,
-  document: documentSlice.reducer,
-  textLayer: textLayerSlice.reducer,
   ui: uiSlice.reducer,
+  pages: pagesReducer,
 });
 
-/** Root reducer: the app reducer wrapped with undo/redo history (state.history). */
-export const rootReducer = undoable(appReducer);
+/** Root reducer. Undo/redo is ignored while a long operation (straighten, OCR, export) is running. */
+export function rootReducer(state, action) {
+  if (state?.ui?.busy && (undo.match(action) || redo.match(action))) return state;
+  return appReducer(state, action);
+}
 
 /** One store for the whole app. RTK's dev checks flag mutations and non-serialisable values. */
 export function createAppStore(preloadedState) {

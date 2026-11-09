@@ -1,15 +1,17 @@
 import { useRef } from 'react';
-import { svgPoint, useDispatch, useSelector, useT } from '../hooks.js';
-import { cornerDragEnded, cornerDragStarted, cornerMoved, dpiSet, enhanceSet, orientationSet, stepSet } from '../store/slices.js';
+import { svgPoint, useDispatch, usePage, useSelector, useT } from '../hooks.js';
+import { cornerDragEnded, cornerDragStarted, cornerMoved, dpiSet, enhanceSet, orientationSet, viewSet } from '../store/slices.js';
+import PageHeading from './PageHeading.jsx';
 import UndoRedo from './UndoRedo.jsx';
 import { autoDetect, nextFromCorners, selectWholeImage } from '../store/thunks.js';
 
 export default function CornerStep() {
   const t = useT();
   const dispatch = useDispatch();
-  const photo = useSelector((s) => s.document.photo);
-  const quad = useSelector((s) => s.document.quad);
-  const dragging = useSelector((s) => s.document.draggingCorner);
+  const photo = usePage((p) => p.document.photo);
+  const quad = usePage((p) => p.document.quad);
+  const dragging = usePage((p) => p.document.draggingCorner);
+  const detectFailed = usePage((p) => p.document.detectFailed);
   const settings = useSelector((s) => s.settings);
   const busy = useSelector((s) => s.ui.busy);
   const svgRef = useRef(null);
@@ -32,8 +34,10 @@ export default function CornerStep() {
 
   return (
     <section id="s2">
-      <h2>{t('step2')}</h2>
+      <h2>{t('cornersTitle')}</h2>
+      <PageHeading />
       <p className="hint">{t('cornersHint')}</p>
+      {detectFailed && <p className="hint warn">{t('detectFailed')}</p>}
       <div className="stage corner-stage">
         <img src={photo.url} alt="" draggable={false} />
         <svg ref={svgRef} viewBox={`0 0 ${photo.w} ${photo.h}`} onPointerDown={onDown} onPointerMove={onMove}
@@ -65,7 +69,7 @@ export default function CornerStep() {
         </label>
       </div>
       <div className="nav">
-        <button type="button" className="ghost" disabled={busy} onClick={() => dispatch(stepSet('photo'))}>{t('back')}</button>
+        <button type="button" className="ghost" disabled={busy} onClick={() => dispatch(viewSet('pages'))}>{t('backToPages')}</button>
         <button id="warpBtn" type="button" className="primary" disabled={busy} onClick={() => dispatch(nextFromCorners())}>{t('nextStraighten')}</button>
       </div>
     </section>
